@@ -8,7 +8,14 @@ namespace BaseBallDataScraper.Models
     {
         private int firstTeam;
         private int secondTeam;
+        private string firstTeamName;
+        private string secondTeamName;
         private bool isOmote;
+
+        public BallCounter(string firstTeamName, string secondTeamName) {
+            this.firstTeamName = firstTeamName;
+            this.secondTeamName = secondTeamName;
+        }
 
         public int giveBallNum()
         {
@@ -32,6 +39,16 @@ namespace BaseBallDataScraper.Models
             {
                 this.firstTeam++;
             }
+        }
+
+        public string getAttackTeam()
+        {
+            return isOmote ? firstTeamName : secondTeamName;
+        }
+
+        public string getPitchTeam()
+        {
+            return isOmote ? secondTeamName : firstTeamName;
         }
 
         public void omoteUra(int attack)

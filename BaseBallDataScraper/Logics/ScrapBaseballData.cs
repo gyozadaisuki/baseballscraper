@@ -12,120 +12,131 @@ namespace BaseBallDataScraper.Logics
 {
     class ScrapBaseballData
     {
-        string urlBase = "https://baseball.yahoo.co.jp/npb/game/";
-        string yahooBaseball = "https://baseball.yahoo.co.jp";
+        private string urlBase = "https://baseball.yahoo.co.jp/npb/game/";
+        private string yahooBaseball = "https://baseball.yahoo.co.jp";
         // イニング数×100000、先行は10000、打者数×100でURLパラメータが構成される
-        int inningNum = 100000;
-        int attackNum = 10000;
-        int batterNum = 100;
+        private int _inningNum = 100000;
+        private int _attackNum = 10000;
+        private int _batterNum = 100;
+        private int _gameNumber;
 
-        public async Task<List<BaseballModel>> FetchBaseBallGameDataAsync(int gameNumber)
+        public ScrapBaseballData(int gameNumber)
         {
-            List<BaseballModel> baseballModels = new List<BaseballModel>();
-            var urlstring = urlBase + gameNumber.ToString() + "/top";
+            this._gameNumber = gameNumber;
+        }
+
+
+        public async Task<List<BaseballModel>> FetchBaseBallGameDataAsync()
+        {
+            var urlstring = urlBase + _gameNumber.ToString() + "/top";
 
             var doc = await ScrapHtmlAsync(urlstring);
-            if (doc == null)
+            if (doc == null || isNoGame(doc))
             {
                 return null;
             }
-            if (doc.GetElementById("gm_brd").InnerHtml.Contains("試合中止") || doc.GetElementById("gm_brd").InnerHtml.Contains("ノーゲーム"))
-            {
-                return baseballModels;
-            }
+            List<BaseballModel> baseballModels = new List<BaseballModel>();
+
             var teams = doc.GetElementsByClassName("bb-gameScoreTable__team");
             string firstTeam = teams[0].InnerHtml;
             string secondTeam = teams[1].InnerHtml;
 
-            var ballCounter = new BallCounter();
+            var ballCounter = new BallCounter(firstTeam, secondTeam);
 
             DateTime gameDate = FetchGameDate(doc);
             bool gameEndFlg = false;
+            var scoreurlbase = urlBase + _gameNumber.ToString() + "/score?index=";
             for (int inning = 1; inning <= 9; inning++)
             {
                 for (int attack = 1; attack <= 2; attack++)
                 {
-                    List<PitchingData> pitchingDatas = new List<PitchingData>();
-                    bool threeoutflg = false;
-                    int batter = 0;
-                    while (!threeoutflg)
+                    int batter = 1;
+                    ballCounter.omoteUra(attack);
+                    var resultHtml = default(IHtmlDocument);
+                    if (gameEndFlg = !await CheckAbnormalGameEnd(scoreurlbase, _inningNum * inning + _attackNum * attack))
                     {
-                        var parameter = inningNum * inning + attackNum * attack + batterNum * batter;
-                        var scoreurlbase = urlBase + gameNumber.ToString() + "/score?index=";
-                        if (batter == 0)
+                        do
                         {
-                            gameEndFlg = await CheckAbnormalGameEnd(scoreurlbase, parameter);
-                        }
-                        else
-                        {
-                            IHtmlDocument scoreHtml = await SearchNext(scoreurlbase, parameter);
+                            var parameter = _inningNum * inning + _attackNum * attack + _batterNum * batter;
+                            // 雨天中止等の場合に、0人目ifの打者で試合終了している場合があるのでそのチェック
+                            resultHtml = await GetResultHtml(scoreurlbase, parameter);
+                            var pitchingDatas = FetchBaseballScores(resultHtml, parameter, ballCounter);
+                            foreach (var pitchingData in pitchingDatas)
+                            {
+                                baseballModels.Add(new BaseballModel(ballCounter, pitchingData, gameDate, _gameNumber));
+                            }
+                            gameEndFlg = await GameEnded(scoreurlbase, parameter);
 
-                            if (GameEnded(scoreHtml))
-                            {
-                                gameEndFlg = true;
-                            }
-                            scoreHtml = await SearchBallResult(scoreHtml, parameter);
-                            ballCounter.omoteUra(attack);
-                            var pitchingdata = FetchBaseballScores(scoreHtml, parameter, ballCounter);
-                            if (pitchingdata == null)
-                            {
-                                continue;
-                            }
-                            pitchingDatas.AddRange(pitchingdata);
-                            threeoutflg = IsThreeOut(scoreHtml);
-                        }
-                        batter++;
-                        if (gameEndFlg)
-                        {
-                            break;
-                        }
+                            batter++;
+                        } while (!IsThreeOut(resultHtml));
                     }
-                    foreach (var pitchingData in pitchingDatas)
-                    {
-                        string battingTeam = attack % 2 == 0 ? secondTeam : firstTeam;
-                        string pitchingTeam = attack % 2 == 0 ? firstTeam : secondTeam;
-                        baseballModels.Add(new BaseballModel(battingTeam, pitchingTeam, pitchingData, gameDate, gameNumber));
-                    }
-                    if (gameEndFlg)
-                    {
+                    if (gameEndFlg) {
+                        attack = 3;
+                        inning = 9;
                         break;
-                    }
-                }
-                if (gameEndFlg)
-                {
-                    break;
+                    } 
                 }
             }
             return baseballModels;
         }
 
-        private bool GameEnded(IHtmlDocument doc)
+        private async Task<IHtmlDocument> GetResultHtml(string scoreurlbase, int parameter)
         {
-            var result = doc.GetElementById("result").TextContent;
-            return doc.GetElementById("result").TextContent.Contains("試合終了");
+            // その打者の最後のHTMLを探す
+            IHtmlDocument scoreHtml = await SearchLastResult(scoreurlbase, parameter);
+
+            // 最後からさかのぼり、結果がある個所を探す
+            return await SearchBallResult(scoreHtml, parameter);
         }
 
-        private async Task<IHtmlDocument> SearchNext(string scoreURLBase, int parameter)
+        private async Task<bool> GameEnded(string scoreurlbase, int parameter)
+        {
+            var url = scoreurlbase + parameter.ToString("D7");
+            bool isGameEnd = false;
+            var doc = await ScrapHtmlAsync(url);
+            if (doc == null)
+            {
+                return isGameEnd;
+            }
+            var result = doc.GetElementById("result").TextContent;
+            isGameEnd = doc.GetElementById("result").TextContent.Contains("試合終了");
+            if (!isGameEnd) {
+                var next = GetNextParam(doc);
+                if (next / 100 == parameter / 100)
+                {
+                    isGameEnd = await GameEnded(scoreurlbase, next);
+                }
+            }
+            return isGameEnd;
+        }
+
+        // その打者で結果が出るまで次のページへ進む
+        private async Task<IHtmlDocument> SearchLastResult(string scoreURLBase, int parameter)
         {
             var url = scoreURLBase + parameter.ToString("D7");
             var doc = await ScrapHtmlAsync(url);
-            if(doc == null)
+            if (doc == null)
             {
                 return null;
             }
-            var btnNext = doc.GetElementById("btn_next");
-            if(btnNext == null)
+            var next = GetNextParam(doc);
+            if (next / 100 == parameter / 100)
             {
-                return doc;
+                doc = await SearchLastResult(scoreURLBase, next);
+            }
+            return doc;
+        }
+
+        private static int GetNextParam(IHtmlDocument doc)
+        {
+            var btnNext = doc.GetElementById("btn_next");
+            if (btnNext == null)
+            {
+                return -1;
             }
             var href = btnNext.GetAttribute("href");
             var reg = Regex.Matches(href, @"[=](\d*\.?\d+)");
-            var next = int.Parse(reg[0].Groups[1].Value);
-            if (next/100 == parameter/100)
-            {
-                doc = await SearchNext(scoreURLBase, next);
-            }
-            return doc;
+            return int.Parse(reg[0].Groups[1].Value);
         }
 
         private async Task<bool> CheckAbnormalGameEnd(string scoreURLBase, int parameter)
@@ -136,7 +147,7 @@ namespace BaseBallDataScraper.Logics
             {
                 return false;
             }
-            if (GameEnded(doc))
+            if (await GameEnded(scoreURLBase, parameter))
             {
                 return true;
             }
@@ -295,12 +306,21 @@ namespace BaseBallDataScraper.Logics
             return pitchingDatas;
         }
 
-
         private bool IsThreeOut(IHtmlDocument doc)
         {
             // アウトカウントのhtmlに●●●があると3アウト
             var outCount = doc.GetElementsByClassName("o")[0].QuerySelector("b");
             return outCount.InnerHtml.Equals("●●●");
+        }
+
+        private bool isNoGame(IHtmlDocument doc)
+        {
+            var gameBoard = doc.GetElementById("gm_brd").InnerHtml;
+            if (gameBoard.Contains("試合中止") || gameBoard.Contains("ノーゲーム"))
+            {
+                return true;
+            }
+            return false;
         }
     }
 }

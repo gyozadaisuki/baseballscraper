@@ -6,10 +6,10 @@ namespace BaseBallDataScraper.Models
 {
     public class BaseballModel
     {
-        public BaseballModel(string battingTeam, string pitchingTeam, PitchingData pitchingData, DateTime gameDate, int gameNumber)
+        public BaseballModel(BallCounter ballCounter, PitchingData pitchingData, DateTime gameDate, int gameNumber)
         {
-            this.battingTeam = battingTeam;
-            this.pitchingTeam = pitchingTeam;
+            this.battingTeam = ballCounter.getAttackTeam();
+            this.pitchingTeam = ballCounter.getPitchTeam();
             this.pitchingData = pitchingData;
             this.gameDate = gameDate;
             this.gameNumber = gameNumber;

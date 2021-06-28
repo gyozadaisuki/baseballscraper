@@ -15,29 +15,30 @@ namespace BaseBallDataScraper
         {
             logger.Info($"Update Start");
             List<BaseballModel> baseballlogs = new List<BaseballModel>();
-            DatabaseAccessor accessor = new DatabaseAccessor();
+            DatabaseAccessor accessor = DatabaseAccessor.getInstance();
             int gameNumber = accessor.getMaxGameNumber();
-            var scraper = new ScrapBaseballData();
             int noPageCount = 0;
             try
             {
-                while (true)
-                {
+                //while (true)
+                //{
                     gameNumber++;
+                    var scraper = new ScrapBaseballData(gameNumber);
                     logger.Info($"Update {gameNumber} start");
-                    var baseBalldata = await scraper.FetchBaseBallGameDataAsync(gameNumber);
+                    var baseBalldata = await scraper.FetchBaseBallGameDataAsync();
                     if (baseBalldata == null)
                     {
-                        if(noPageCount > 10)
-                        {
-                            break;
-                        }
-                        noPageCount++;
-                        continue;
+                        //// 試合番号は飛ぶことがあるので、10連続で飛んだ場合に打ち切る形とする
+                        //if(noPageCount > 10)
+                        //{
+                        //    break;
+                        //}
+                        //noPageCount++;
+                        //continue;
                     }
                     baseballlogs.AddRange(baseBalldata);
                     logger.Info($"Update {gameNumber} finished");
-                }
+                //}
             }
             catch(Exception e)
             {

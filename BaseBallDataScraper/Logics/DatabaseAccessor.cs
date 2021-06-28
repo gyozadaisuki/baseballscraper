@@ -7,8 +7,17 @@ using BaseBallDataScraper.Models;
 
 namespace BaseBallDataScraper.Logics
 {
-    class DatabaseAccessor
+    public class DatabaseAccessor
     {
+        private static DatabaseAccessor databaseAccessor = new DatabaseAccessor();
+
+        private DatabaseAccessor() { }
+
+        public static DatabaseAccessor getInstance()
+        {
+            return databaseAccessor;
+        }
+
         public void updateBaseballLogs(List<BaseballModel> baseballlogs)
         {
             insertBaseBallLogs(baseballlogs);
@@ -20,7 +29,7 @@ namespace BaseBallDataScraper.Logics
             {
                 if(context.Baseballlogs.Count()== 0)
                 {
-                    return 2021000094;
+                    return 2021000095;
                 }
                 return  context.Baseballlogs.Select(x => x.Gamenumber).Max();
             }
