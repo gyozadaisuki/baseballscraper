@@ -25,5 +25,10 @@ namespace BaseBallDataScraper.Extensions
 
             public int GetHashCode(KeyValuePair<Tkey, TValue> obj) => obj.Key.GetHashCode();
         }
+
+        public static Dictionary<Tkey, TValue> ToDictionary<Tkey, TValue>(this IEnumerable<KeyValuePair<Tkey, TValue>> source)
+            => source.ToDictionary(
+                keySelector: kv => kv.Key,
+                elementSelector: kv => kv.Value);
     }
 }

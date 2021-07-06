@@ -14,12 +14,17 @@ namespace BaseBallDataScraper.Models
 
         public bool omoteFlg { get; }
 
-        public Players(Player picther, Player batter, string catcherName, bool omoteFlg)
+        public Players(Player pitcher, Player batter, string catcherName, bool omoteFlg)
         {
             this.pitcher = pitcher;
             this.batter = batter;
             this.catcherName = catcherName;
             this.omoteFlg = omoteFlg;
+        }
+
+        public bool hasAllData()
+        {
+            return this.pitcher != null && this.batter != null && this.catcherName != null;
         }
 
         //objと自分自身が等価のときはtrueを返す
